@@ -1,6 +1,6 @@
 /* Settings go here */
 import { useState } from "react";
-import './App.css'
+import './Settings.css';
 import { useNavigate } from 'react-router-dom'
 
 function Settings(){
@@ -18,59 +18,64 @@ function Settings(){
             allowExclusions,
         }
         console.log('Saved settings:', settings)
-        alert('Settings saved!')
     }
     return (
-    <section id="center">
-      <h1>Group Settings</h1>
+    <div className="settings-container">
+      <section className="settings-card">
+        <h1 className="settings-heading">Group Settings</h1>
 
-      {/* Group Name */}
-      <div>
-        <label>Group Name</label>
-        <br />
-        <input
-          type="text"
-          value={groupName}
-          onChange={(e) => setGroupName(e.target.value)}
-          placeholder="Enter group name"
-        />
-      </div>
-
-      {/* Split Type */}
-      <div>
-        <label>Split Method</label>
-        <br />
-        <select
-          value={splitType}
-          onChange={(e) => setSplitType(e.target.value)}
-        >
-          <option value="equal">Equal Split</option>
-          <option value="custom">Custom Amounts</option>
-        </select>
-      </div>
-
-      {/* Exclusions */}
-      <div>
-        <label>
+        {/* Group Name */}
+        <div>
+          <br />
           <input
-            type="checkbox"
-            checked={allowExclusions}
-            onChange={() => setAllowExclusions(!allowExclusions)}
+            className="settings-input"
+            type="text"
+            value={groupName}
+            onChange={(e) => setGroupName(e.target.value)}
+            placeholder="Enter group name"
           />
-          Allow excluding members from payments
-        </label>
-      </div>
+        </div>
 
-      {/* Save Button */}
-      <button className="counter" onClick={handleSave}>
-        Save Settings
-      </button>
+        {/* Split Type */}
+        <div>
+          <br />
+          <select
+            className="settings-selection"
+            value={splitType}
+            onChange={(e) => setSplitType(e.target.value)}
+          >
+            <option value="equal">Equal Split</option>
+            <option value="custom">Custom Amounts</option>
+          </select>
+        </div>
 
-      {/* Back Button */}
-      <button className="counter" onClick={() => navigate('/')}>
-        Back
-      </button>
-    </section>
+        {/* Exclusions */}
+        <div>
+          <label  className="settings-subtitle">
+            <input
+              type="checkbox"
+              checked={allowExclusions}
+              onChange={() => setAllowExclusions(!allowExclusions)}
+            />
+            Allow excluding members from payments
+          </label>
+        </div>
+
+        {/* Save Button */}
+        <button   
+          type="submit"
+          className="settings-button" 
+          onClick={handleSave}>
+            
+          Save Settings
+        </button>
+
+        {/* Back Button */}
+        <button className="settings-button" onClick={() => navigate('/')}>
+          Back
+        </button>
+      </section>
+    </div>
   )
 }
 export default Settings;

@@ -20,6 +20,12 @@ const Landing = () => {
         >
           Sign Up
         </button>
+        <button
+          className="auth-button sign-up"
+          onClick={() => navigate('/settings')}
+        >
+          Settings
+        </button>
       </header>
 
       {/* Title */}
