@@ -73,4 +73,4 @@ function Settings(){
     </section>
   )
 }
-export default Settings
+export default Settings;
