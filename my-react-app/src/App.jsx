@@ -3,9 +3,12 @@ import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
 import './App.css'
+import { Routes, Route, useNavigate } from 'react-router-dom'
+import Settings from './Settings'
 
-function App() {
+function Home() {
   const [count, setCount] = useState(0)
+  const navigate = useNavigate()
 
   return (
     <>
@@ -27,6 +30,14 @@ function App() {
         >
           Count is {count}
         </button>
+
+        <button 
+        className = 'counter'
+        onClick={() => navigate('/settings')}
+        >
+          Go to Settings
+        </button>
+
       </section>
 
       <div className="ticks"></div>
@@ -117,5 +128,12 @@ function App() {
     </>
   )
 }
-
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/settings" element={<Settings />} />
+    </Routes>
+  )
+}
 export default App
