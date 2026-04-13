@@ -1,20 +1,22 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import './Landing.css';
 
 const Landing = () => {
+  const navigate = useNavigate();
   return (
     <div className="landing-container">
       {/* Header */}
       <header className="landing-header">
         <button
           className="auth-button sign-in"
-          onClick={() => (window.location.href = '/signin')}
+          onClick={() => navigate('/signin')}
         >
           Sign In
         </button>
         <button
           className="auth-button sign-up"
-          onClick={() => (window.location.href = '/signup')}
+          onClick={() => navigate('/signup')}
         >
           Sign Up
         </button>
