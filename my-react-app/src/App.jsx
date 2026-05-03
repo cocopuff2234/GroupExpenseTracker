@@ -5,6 +5,7 @@ import Landing from './pages/Landing'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import Dashboard from './pages/Dashboard'
+import GroupDashboard from './pages/GroupDashboard'
 import Settings from './pages/Settings'
 import { AuthContext } from './context/auth-context'
 
@@ -33,6 +34,14 @@ function App() {
             <Dashboard />
           </ProtectedRoute>
         } 
+      />
+      <Route
+        path="/groups/:groupId"
+        element={
+          <ProtectedRoute>
+            <GroupDashboard />
+          </ProtectedRoute>
+        }
       />
       <Route 
         path="/settings" 

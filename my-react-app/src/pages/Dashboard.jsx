@@ -3,11 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import {
   addDoc,
+  arrayUnion,
   collection,
+  deleteDoc,
+  doc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
-  where
+  updateDoc,
+  where,
+  writeBatch
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase-config';
 import { AuthContext } from '../context/auth-context';
@@ -20,11 +26,20 @@ const Dashboard = () => {
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [groupsError, setGroupsError] = useState('');
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [isJoiningGroup, setIsJoiningGroup] = useState(false);
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [groupToDelete, setGroupToDelete] = useState(null);
+  const [joinCode, setJoinCode] = useState('');
   const [newGroup, setNewGroup] = useState({
     name: '',
     currency: 'USD'
   });
+
+  const createGroupCode = () => {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  };
 
   useEffect(() => {
     if (!user) {
@@ -45,7 +60,19 @@ const Dashboard = () => {
       groupsQuery,
       (snapshot) => {
         const nextGroups = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .map((groupDoc) => {
+            const groupData = groupDoc.data();
+
+            if (!groupData.inviteCode) {
+              updateDoc(doc(db, 'groups', groupDoc.id), {
+                inviteCode: createGroupCode()
+              }).catch((error) => {
+                console.error('Invite code backfill error:', error);
+              });
+            }
+
+            return { id: groupDoc.id, ...groupData };
+          })
           .sort((a, b) => {
             const aTime = a.createdAt?.toMillis?.() || 0;
             const bTime = b.createdAt?.toMillis?.() || 0;
@@ -90,6 +117,7 @@ const Dashboard = () => {
       await addDoc(collection(db, 'groups'), {
         name: newGroup.name.trim(),
         currency: newGroup.currency,
+        inviteCode: createGroupCode(),
         createdAt: serverTimestamp(),
         createdBy: user.uid,
         memberIds: [user.uid],
@@ -108,6 +136,75 @@ const Dashboard = () => {
       setGroupsError(error.message);
     } finally {
       setIsCreatingGroup(false);
+    }
+  };
+
+  const handleJoinGroup = async (e) => {
+    e.preventDefault();
+
+    const normalizedCode = joinCode.trim().toUpperCase();
+    if (!normalizedCode || !user || isJoiningGroup) {
+      return;
+    }
+
+    setIsJoiningGroup(true);
+    setGroupsError('');
+
+    try {
+      const joinQuery = query(
+        collection(db, 'groups'),
+        where('inviteCode', '==', normalizedCode)
+      );
+      const snapshot = await getDocs(joinQuery);
+
+      if (snapshot.empty) {
+        setGroupsError('No group found with that code.');
+        return;
+      }
+
+      const groupDoc = snapshot.docs[0];
+      await updateDoc(doc(db, 'groups', groupDoc.id), {
+        memberIds: arrayUnion(user.uid),
+        members: arrayUnion({
+          uid: user.uid,
+          email: user.email || ''
+        })
+      });
+
+      setJoinCode('');
+      navigate(`/groups/${groupDoc.id}`);
+    } catch (error) {
+      console.error('Join group error:', error);
+      setGroupsError(error.message);
+    } finally {
+      setIsJoiningGroup(false);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!groupToDelete || isDeletingGroup) {
+      return;
+    }
+
+    setIsDeletingGroup(true);
+    setGroupsError('');
+
+    try {
+      const expensesSnapshot = await getDocs(collection(db, 'groups', groupToDelete.id, 'expenses'));
+      const batch = writeBatch(db);
+
+      expensesSnapshot.docs.forEach((expenseDoc) => {
+        batch.delete(expenseDoc.ref);
+      });
+
+      await batch.commit();
+      await deleteDoc(doc(db, 'groups', groupToDelete.id));
+      setGroupToDelete(null);
+    } catch (error) {
+      console.error('Delete group error:', error);
+      setGroupsError(error.message);
+    } finally {
+      setIsDeletingGroup(false);
     }
   };
 
@@ -176,6 +273,19 @@ const Dashboard = () => {
             </button>
           </div>
 
+          <form className="join-group-form" onSubmit={handleJoinGroup}>
+            <input
+              type="text"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              placeholder="Enter group code"
+              disabled={isJoiningGroup}
+            />
+            <button type="submit" className="action-button" disabled={!joinCode.trim() || isJoiningGroup}>
+              {isJoiningGroup ? 'Joining...' : 'Join Group'}
+            </button>
+          </form>
+
           {groupsLoading ? (
             <p className="empty-state">Loading your groups...</p>
           ) : groupsError ? (
@@ -188,10 +298,18 @@ const Dashboard = () => {
                 <div key={group.id} className="group-item">
                   <div className="group-info">
                     <h4>{group.name}</h4>
-                    <span className="group-currency">{group.currency}</span>
+                    <div className="group-meta">
+                      <span className="group-currency">{group.currency}</span>
+                      <span className="group-code">Code: {group.inviteCode || 'Missing'}</span>
+                    </div>
                   </div>
                   <div className="group-actions">
-                    <button className="group-action-btn">View</button>
+                    <button className="group-action-btn" onClick={() => navigate(`/groups/${group.id}`)}>
+                      View
+                    </button>
+                    <button className="group-action-btn danger" onClick={() => setGroupToDelete(group)}>
+                      Delete
+                    </button>
                   </div>
                 </div>
               ))}
@@ -251,6 +369,33 @@ const Dashboard = () => {
                 disabled={!newGroup.name.trim() || isCreatingGroup}
               >
                 {isCreatingGroup ? 'Creating...' : 'Create Group'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {groupToDelete && (
+        <div className="modal-overlay" onClick={() => setGroupToDelete(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3>Delete Group?</h3>
+            <p className="modal-message">
+              Are you sure you want to delete {groupToDelete.name}? This removes the group and its expenses.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="modal-btn cancel"
+                onClick={() => setGroupToDelete(null)}
+                disabled={isDeletingGroup}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-btn danger"
+                onClick={handleDeleteGroup}
+                disabled={isDeletingGroup}
+              >
+                {isDeletingGroup ? 'Deleting...' : 'Delete Group'}
               </button>
             </div>
           </div>
