@@ -43,6 +43,7 @@ const GroupDashboard = () => {
   const [isSavingSplit, setIsSavingSplit] = useState(false);
 
   const members = group?.members || [];
+  const isGroupAdmin = user?.uid === group?.createdBy;
   const includedMembers = members.filter((member) => !excludedMemberIds.includes(member.uid));
   const defaultSplitPercent = includedMembers.length ? 100 / includedMembers.length : 0;
 
@@ -209,6 +210,10 @@ const GroupDashboard = () => {
   };
 
   const handleSplitPercentChange = (memberId, value) => {
+    if (!isGroupAdmin) {
+      return;
+    }
+
     setSplitPercentages((prev) => ({
       ...prev,
       [memberId]: value
@@ -216,6 +221,10 @@ const GroupDashboard = () => {
   };
 
   const handleExcludeMember = (memberId) => {
+    if (!isGroupAdmin) {
+      return;
+    }
+
     setExcludedMemberIds((prev) => (
       prev.includes(memberId)
         ? prev.filter((id) => id !== memberId)
@@ -224,6 +233,10 @@ const GroupDashboard = () => {
   };
 
   const handleEvenSplit = () => {
+    if (!isGroupAdmin) {
+      return;
+    }
+
     const nextIncludedMembers = members.filter((member) => !excludedMemberIds.includes(member.uid));
     const nextPercent = nextIncludedMembers.length ? 100 / nextIncludedMembers.length : 0;
     const nextPercentages = {};
@@ -236,7 +249,7 @@ const GroupDashboard = () => {
   };
 
   const handleSaveSplitSettings = async () => {
-    if (!groupId || isSavingSplit) {
+    if (!groupId || !isGroupAdmin || isSavingSplit) {
       return;
     }
 
@@ -400,13 +413,15 @@ const GroupDashboard = () => {
                 <>
                   <div className="groups-header">
                     <h3>Split Bill</h3>
-                    <button
-                      className="group-action-btn"
-                      type="button"
-                      onClick={handleEvenSplit}
-                    >
-                      Even Split
-                    </button>
+                    {isGroupAdmin && (
+                      <button
+                        className="group-action-btn"
+                        type="button"
+                        onClick={handleEvenSplit}
+                      >
+                        Even Split
+                      </button>
+                    )}
                   </div>
 
                   <div className="split-summary">
@@ -423,6 +438,12 @@ const GroupDashboard = () => {
                   {Math.abs(splitPercentageTotal - 100) > 0.01 && (
                     <p className="split-warning">
                       Percentages should add up to 100% for the whole bill to be assigned.
+                    </p>
+                  )}
+
+                  {!isGroupAdmin && (
+                    <p className="split-readonly">
+                      Only the group administrator can adjust how the bill is split.
                     </p>
                   )}
 
@@ -447,6 +468,7 @@ const GroupDashboard = () => {
                             <input
                               type="checkbox"
                               checked={!member.isExcluded}
+                              disabled={!isGroupAdmin}
                               onChange={() => handleExcludeMember(member.uid)}
                             />
                           </label>
@@ -458,7 +480,7 @@ const GroupDashboard = () => {
                               max="100"
                               step="0.01"
                               value={member.percent}
-                              disabled={member.isExcluded}
+                              disabled={member.isExcluded || !isGroupAdmin}
                               onChange={(e) => handleSplitPercentChange(member.uid, e.target.value)}
                             />
                           </label>
@@ -475,16 +497,18 @@ const GroupDashboard = () => {
                     </div>
                   </div>
 
-                  <div className="split-actions">
-                    <button
-                      className="modal-btn create"
-                      type="button"
-                      onClick={handleSaveSplitSettings}
-                      disabled={isSavingSplit}
-                    >
-                      {isSavingSplit ? 'Saving...' : 'Save Split Settings'}
-                    </button>
-                  </div>
+                  {isGroupAdmin && (
+                    <div className="split-actions">
+                      <button
+                        className="modal-btn create"
+                        type="button"
+                        onClick={handleSaveSplitSettings}
+                        disabled={isSavingSplit}
+                      >
+                        {isSavingSplit ? 'Saving...' : 'Save Split Settings'}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </section>

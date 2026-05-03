@@ -186,6 +186,12 @@ const Dashboard = () => {
       return;
     }
 
+    if (groupToDelete.createdBy !== user?.uid) {
+      setGroupsError('Only the group administrator can delete this group.');
+      setGroupToDelete(null);
+      return;
+    }
+
     setIsDeletingGroup(true);
     setGroupsError('');
 
@@ -239,27 +245,6 @@ const Dashboard = () => {
           <p>Manage your groups and expenses here.</p>
         </section>
 
-        {/* Quick Actions */}
-        <section className="quick-actions">
-          <div className="action-card">
-            <h3>📊 My Groups</h3>
-            <p>View and manage your expense groups.</p>
-            <button className="action-button">View Groups</button>
-          </div>
-
-          <div className="action-card">
-            <h3>➕ Add Expense</h3>
-            <p>Record a new shared expense.</p>
-            <button className="action-button">Add Expense</button>
-          </div>
-
-          <div className="action-card">
-            <h3>💰 Settle Up</h3>
-            <p>Pay back your friends or collect payments.</p>
-            <button className="action-button">Settle</button>
-          </div>
-        </section>
-
         {/* Groups List */}
         <section className="groups-section">
           <div className="groups-header">
@@ -281,7 +266,7 @@ const Dashboard = () => {
               placeholder="Enter group code"
               disabled={isJoiningGroup}
             />
-            <button type="submit" className="action-button" disabled={!joinCode.trim() || isJoiningGroup}>
+            <button type="submit" className="group-action-btn" disabled={!joinCode.trim() || isJoiningGroup}>
               {isJoiningGroup ? 'Joining...' : 'Join Group'}
             </button>
           </form>
@@ -307,9 +292,11 @@ const Dashboard = () => {
                     <button className="group-action-btn" onClick={() => navigate(`/groups/${group.id}`)}>
                       View
                     </button>
-                    <button className="group-action-btn danger" onClick={() => setGroupToDelete(group)}>
-                      Delete
-                    </button>
+                    {group.createdBy === user?.uid && (
+                      <button className="group-action-btn danger" onClick={() => setGroupToDelete(group)}>
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
