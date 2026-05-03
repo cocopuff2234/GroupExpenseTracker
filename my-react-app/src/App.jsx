@@ -6,7 +6,7 @@ import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
-import { AuthContext } from './context/AuthContext'
+import { AuthContext } from './context/auth-context'
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -23,6 +23,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/landing" element={<Landing />} />
       <Route path="/signin" element={<SignIn />} />
       <Route path="/signup" element={<SignUp />} />
       <Route 
@@ -41,6 +42,7 @@ function App() {
           </ProtectedRoute>
         } 
       />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

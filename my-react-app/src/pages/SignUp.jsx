@@ -1,8 +1,9 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../config/firebase-config';
-import { AuthContext } from '../context/AuthContext';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { auth, db } from '../config/firebase-config';
+import { AuthContext } from '../context/auth-context';
 import '../styles/SignUp.css';
 
 const SignUp = () => {
@@ -52,8 +53,15 @@ const SignUp = () => {
 
     setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-      // TODO: Save full name to user profile in database
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      await updateProfile(userCredential.user, {
+        displayName: formData.fullName.trim()
+      });
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        email: userCredential.user.email,
+        fullName: formData.fullName.trim(),
+        createdAt: serverTimestamp()
+      });
       navigate('/dashboard');
     } catch (error) {
       if (error.code === 'auth/email-already-in-use') {
