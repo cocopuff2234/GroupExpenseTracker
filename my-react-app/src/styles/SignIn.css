@@ -12,7 +12,7 @@ body {
   font-family: 'Montserrat', sans-serif;
 }
 
-.signup-container {
+.signin-container {
   min-height: 100vh;
   width: 100%;
   background: #719990;
@@ -27,11 +27,12 @@ body {
   align-items: center;
   padding: 20px;
   box-sizing: border-box;
+  position: relative;
 }
 
-.signup-card {
+.signin-card {
   width: 100%;
-  max-width: 460px;
+  max-width: 430px;
   background: rgba(255, 255, 255, 0.92);
   border-radius: 22px;
   padding: 40px 32px;
@@ -40,7 +41,7 @@ body {
   box-sizing: border-box;
 }
 
-.signup-title {
+.signin-title {
   font-size: 3rem;
   font-weight: 800;
   color: #000;
@@ -48,26 +49,26 @@ body {
   line-height: 1;
 }
 
-.signup-heading {
+.signin-heading {
   font-size: 1.75rem;
   font-weight: 700;
   color: #111;
   margin: 10px 0 8px 0;
 }
 
-.signup-subtitle {
+.signin-subtitle {
   font-size: 1rem;
   color: #444;
   margin: 0 0 28px 0;
 }
 
-.signup-form {
+.signin-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.signup-input {
+.signin-input {
   width: 100%;
   padding: 14px 16px;
   border: 1px solid #d7d7d7;
@@ -79,12 +80,17 @@ body {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.signup-input:focus {
+.signin-input:focus {
   border-color: #719990;
   box-shadow: 0 0 0 3px rgba(113, 153, 144, 0.18);
 }
 
-.signup-button {
+.signin-input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.signin-button {
   margin-top: 8px;
   padding: 14px;
   background-color: #000;
@@ -98,24 +104,29 @@ body {
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.signup-button:hover {
+.signin-button:hover:not(:disabled) {
   transform: translateY(-2px);
   opacity: 0.92;
 }
 
-.signup-footer {
+.signin-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.signin-footer {
   margin-top: 22px;
   font-size: 0.95rem;
   color: #333;
 }
 
-.signup-footer a {
+.signin-footer a {
   color: #000;
   font-weight: 700;
   text-decoration: none;
 }
 
-.signup-footer a:hover {
+.signin-footer a:hover {
   text-decoration: underline;
 }
 
@@ -148,4 +159,14 @@ body {
 .back-button:hover {
   transform: translateY(-2px);
   background: white;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  border-left: 4px solid #c33;
 }

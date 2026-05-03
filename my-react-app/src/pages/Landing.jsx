@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import './Landing.css';
+import '../styles/Landing.css';
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -19,12 +19,6 @@ const Landing = () => {
           onClick={() => navigate('/signup')}
         >
           Sign Up
-        </button>
-        <button
-          className="auth-button sign-up"
-          onClick={() => navigate('/settings')}
-        >
-          Settings
         </button>
       </header>
 

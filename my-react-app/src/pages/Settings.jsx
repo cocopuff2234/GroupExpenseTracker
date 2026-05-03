@@ -1,11 +1,8 @@
-/* Settings go here */
 import { useState } from "react";
-import './Settings.css';
 import { useNavigate } from 'react-router-dom'
+import '../styles/Settings.css';
 
 function Settings(){
-    /* Consts for the Group Name (people spliting the pay), Split Type (equal, custom), and exclusions.
-    This is all pulled from the description of the settings page in the project proposal document. */
     const [groupName, setGroupName] = useState('')
     const [splitType, setSplitType] = useState('equal')
     const [allowExclusions, setAllowExclusions] = useState(false)
@@ -19,6 +16,11 @@ function Settings(){
         }
         console.log('Saved settings:', settings)
     }
+
+    const handleBack = () => {
+        navigate('/dashboard')
+    }
+
     return (
     <div className="settings-container">
       <section className="settings-card">
@@ -71,8 +73,8 @@ function Settings(){
         </button>
 
         {/* Back Button */}
-        <button className="settings-button" onClick={() => navigate('/')}>
-          Back
+        <button className="settings-button" onClick={handleBack}>
+          Back to Dashboard
         </button>
       </section>
     </div>
