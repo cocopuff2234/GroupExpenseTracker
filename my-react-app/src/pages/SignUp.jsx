@@ -11,7 +11,8 @@ const SignUp = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    fullName: ''
+    firstName: '',
+    lastName: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,7 +37,7 @@ const SignUp = () => {
     setError('');
 
     // Validation
-    if (!formData.email || !formData.password || !formData.confirmPassword || !formData.fullName) {
+    if (!formData.email || !formData.password || !formData.confirmPassword || !formData.firstName || !formData.lastName) {
       setError('Please fill in all fields');
       return;
     }
@@ -53,13 +54,25 @@ const SignUp = () => {
 
     setLoading(true);
     try {
+      const firstName = formData.firstName.trim();
+      const lastName = formData.lastName.trim();
+      const displayName = `${firstName} ${lastName}`;
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
       await updateProfile(userCredential.user, {
-        displayName: formData.fullName.trim()
+        displayName
       });
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         email: userCredential.user.email,
-        fullName: formData.fullName.trim(),
+        firstName,
+        lastName,
+        displayName,
+        paymentMethods: {
+          venmo: '',
+          zelle: '',
+          cashApp: '',
+          paypal: ''
+        },
+        preferredPaymentMethod: 'venmo',
         createdAt: serverTimestamp()
       });
       navigate('/dashboard');
@@ -91,10 +104,19 @@ const SignUp = () => {
         <form className="signup-form" onSubmit={handleSubmit}>
           <input
             type="text"
-            name="fullName"
-            placeholder="Full Name"
+            name="firstName"
+            placeholder="First Name"
             className="signup-input"
-            value={formData.fullName}
+            value={formData.firstName}
+            onChange={handleChange}
+            disabled={loading}
+          />
+          <input
+            type="text"
+            name="lastName"
+            placeholder="Last Name"
+            className="signup-input"
+            value={formData.lastName}
             onChange={handleChange}
             disabled={loading}
           />

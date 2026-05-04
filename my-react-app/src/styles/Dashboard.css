@@ -115,6 +115,13 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
 }
 
+.dashboard-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
 .groups-section h3 {
   color: #111;
   margin-top: 0;
@@ -189,6 +196,30 @@
   justify-content: space-between;
   align-items: center;
   transition: all 0.25s ease;
+}
+
+.owed-item {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.owed-item h4 {
+  margin: 0 0 0.5rem 0;
+  color: #111;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.owed-item strong {
+  color: #111;
+  font-size: 1.1rem;
+  white-space: nowrap;
 }
 
 .group-item:hover {
@@ -505,6 +536,29 @@
   margin-top: 1.5rem;
 }
 
+.payment-detail {
+  background: rgba(113, 153, 144, 0.16);
+  border-radius: 8px;
+  color: #244139;
+  line-height: 1.5;
+  margin: 0;
+  padding: 1rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.payment-detail span {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 800;
+  margin-bottom: 0.35rem;
+}
+
+.payment-detail a {
+  color: #111;
+  font-weight: 800;
+}
+
 .expense-mode-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -649,4 +703,10 @@
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+}
+
+@media (max-width: 900px) {
+  .dashboard-main-grid {
+    grid-template-columns: 1fr;
+  }
 }

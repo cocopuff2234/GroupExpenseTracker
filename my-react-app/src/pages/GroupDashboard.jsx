@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -23,10 +24,19 @@ const initialExpense = {
   imageUrl: ''
 };
 
+const getPersonName = (person) => person?.displayName || person?.email || 'Unknown user';
+
+const paymentMethodLabels = {
+  venmo: 'Venmo',
+  zelle: 'Zelle',
+  cashApp: 'Cash App',
+  paypal: 'PayPal'
+};
+
 const GroupDashboard = () => {
   const { groupId } = useParams();
   const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
+  const { user, userProfile } = useContext(AuthContext);
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,13 +47,20 @@ const GroupDashboard = () => {
   const [newExpense, setNewExpense] = useState(initialExpense);
   const [expenseImageFile, setExpenseImageFile] = useState(null);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [expenseToEdit, setExpenseToEdit] = useState(null);
+  const [editedExpense, setEditedExpense] = useState(initialExpense);
+  const [expenseToDelete, setExpenseToDelete] = useState(null);
+  const [isUpdatingExpense, setIsUpdatingExpense] = useState(false);
+  const [isDeletingExpense, setIsDeletingExpense] = useState(false);
   const [activeTab, setActiveTab] = useState('expenses');
   const [splitPercentages, setSplitPercentages] = useState({});
   const [excludedMemberIds, setExcludedMemberIds] = useState([]);
   const [isSavingSplit, setIsSavingSplit] = useState(false);
+  const [showPayAdminModal, setShowPayAdminModal] = useState(false);
 
   const members = group?.members || [];
   const isGroupAdmin = user?.uid === group?.createdBy;
+  const adminMember = members.find((member) => member.uid === group?.createdBy);
   const includedMembers = members.filter((member) => !excludedMemberIds.includes(member.uid));
   const defaultSplitPercent = includedMembers.length ? 100 / includedMembers.length : 0;
 
@@ -82,6 +99,11 @@ const GroupDashboard = () => {
   });
 
   const splitPercentageTotal = splitRows.reduce((total, member) => total + member.percent, 0);
+  const currentUserSplitRow = splitRows.find((member) => member.uid === user?.uid);
+  const currentUserOwes = currentUserSplitRow?.amount || 0;
+  const adminPreferredPaymentMethod = adminMember?.preferredPaymentMethod || 'venmo';
+  const adminPaymentValue = adminMember?.paymentMethods?.[adminPreferredPaymentMethod] || '';
+  const adminPaymentLabel = paymentMethodLabels[adminPreferredPaymentMethod] || 'Payment Method';
 
   useEffect(() => {
     if (!groupId) {
@@ -167,6 +189,82 @@ const GroupDashboard = () => {
     }));
   };
 
+  const handleEditedExpenseChange = (e) => {
+    const { name, value } = e.target;
+    setEditedExpense((prev) => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const openEditExpense = (expense) => {
+    if (expense.createdBy !== user?.uid) {
+      return;
+    }
+
+    setExpenseToEdit(expense);
+    setEditedExpense({
+      date: expense.date || '',
+      price: expense.price || '',
+      name: expense.name || expense.location || '',
+      imageName: expense.imageName || '',
+      imageUrl: expense.imageUrl || ''
+    });
+    setError('');
+  };
+
+  const handleUpdateExpense = async () => {
+    if (
+      !expenseToEdit
+      || expenseToEdit.createdBy !== user?.uid
+      || !editedExpense.date.trim()
+      || !editedExpense.price.trim()
+      || !editedExpense.name.trim()
+      || isUpdatingExpense
+    ) {
+      return;
+    }
+
+    setIsUpdatingExpense(true);
+    setError('');
+
+    try {
+      await updateDoc(doc(db, 'groups', groupId, 'expenses', expenseToEdit.id), {
+        date: editedExpense.date.trim(),
+        price: editedExpense.price.trim(),
+        name: editedExpense.name.trim(),
+        updatedAt: serverTimestamp()
+      });
+
+      setExpenseToEdit(null);
+      setEditedExpense(initialExpense);
+    } catch (error) {
+      console.error('Update expense error:', error);
+      setError(error.message);
+    } finally {
+      setIsUpdatingExpense(false);
+    }
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!expenseToDelete || expenseToDelete.createdBy !== user?.uid || isDeletingExpense) {
+      return;
+    }
+
+    setIsDeletingExpense(true);
+    setError('');
+
+    try {
+      await deleteDoc(doc(db, 'groups', groupId, 'expenses', expenseToDelete.id));
+      setExpenseToDelete(null);
+    } catch (error) {
+      console.error('Delete expense error:', error);
+      setError(error.message);
+    } finally {
+      setIsDeletingExpense(false);
+    }
+  };
+
   const handleAddExpense = async () => {
     if (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim() || isSavingExpense) {
       return;
@@ -194,6 +292,7 @@ const GroupDashboard = () => {
         entryType: expenseMode,
         createdAt: serverTimestamp(),
         createdBy: user.uid,
+        createdByName: userProfile?.displayName || user.displayName || user.email || '',
         createdByEmail: user.email || ''
       });
 
@@ -363,7 +462,7 @@ const GroupDashboard = () => {
                             <div className="group-meta">
                               <span className="group-currency">{expense.price}</span>
                               <span className="group-code">{expense.date}</span>
-                              <span className="group-code">By {expense.createdByEmail || 'Unknown user'}</span>
+                              <span className="group-code">By {expense.createdByName || expense.createdByEmail || 'Unknown user'}</span>
                               {expense.imageName && <span className="group-code">{expense.imageName}</span>}
                             </div>
                             {expense.imageUrl && (
@@ -372,6 +471,16 @@ const GroupDashboard = () => {
                               </a>
                             )}
                           </div>
+                          {expense.createdBy === user?.uid && (
+                            <div className="group-actions">
+                              <button className="group-action-btn" onClick={() => openEditExpense(expense)}>
+                                Edit
+                              </button>
+                              <button className="group-action-btn danger" onClick={() => setExpenseToDelete(expense)}>
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                       <div className="expense-total-row">
@@ -395,10 +504,10 @@ const GroupDashboard = () => {
                       {members.map((member) => (
                         <div key={member.uid || member.email} className="member-item">
                           <div className="member-avatar">
-                            {(member.email || 'U').charAt(0).toUpperCase()}
+                            {getPersonName(member).charAt(0).toUpperCase()}
                           </div>
                           <div className="group-info">
-                            <h4>{member.email || 'Unknown user'}</h4>
+                            <h4>{getPersonName(member)}</h4>
                             <div className="group-meta">
                               {member.uid === group.createdBy && <span className="group-code">Creator</span>}
                               {member.uid === user?.uid && <span className="group-code">You</span>}
@@ -430,6 +539,10 @@ const GroupDashboard = () => {
                       <strong>{formattedExpenseTotal}</strong>
                     </div>
                     <div>
+                      <span>You Owe</span>
+                      <strong>{formatCurrency(currentUserOwes)}</strong>
+                    </div>
+                    <div>
                       <span>Assigned</span>
                       <strong>{splitPercentageTotal.toFixed(2)}%</strong>
                     </div>
@@ -452,10 +565,10 @@ const GroupDashboard = () => {
                       <div key={member.uid || member.email} className="split-member-row">
                         <div className="split-member-main">
                           <div className="member-avatar">
-                            {(member.email || 'U').charAt(0).toUpperCase()}
+                            {getPersonName(member).charAt(0).toUpperCase()}
                           </div>
                           <div className="group-info">
-                            <h4>{member.email || 'Unknown user'}</h4>
+                            <h4>{getPersonName(member)}</h4>
                             <div className="group-meta">
                               {member.uid === user?.uid && <span className="group-code">You</span>}
                               {member.isExcluded && <span className="group-code">Excluded</span>}
@@ -506,6 +619,18 @@ const GroupDashboard = () => {
                         disabled={isSavingSplit}
                       >
                         {isSavingSplit ? 'Saving...' : 'Save Split Settings'}
+                      </button>
+                    </div>
+                  )}
+
+                  {!isGroupAdmin && currentUserOwes > 0 && (
+                    <div className="split-actions">
+                      <button
+                        className="modal-btn create"
+                        type="button"
+                        onClick={() => setShowPayAdminModal(true)}
+                      >
+                        Pay Administrator
                       </button>
                     </div>
                   )}
@@ -600,6 +725,120 @@ const GroupDashboard = () => {
                 disabled={!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim() || isSavingExpense}
               >
                 {isSavingExpense ? 'Saving...' : 'Save Expense'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {expenseToEdit && (
+        <div className="modal-overlay" onClick={() => setExpenseToEdit(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3>Edit Expense</h3>
+            <div className="modal-form">
+              <div className="form-group">
+                <label htmlFor="editExpenseDate">Date</label>
+                <input
+                  type="text"
+                  id="editExpenseDate"
+                  name="date"
+                  value={editedExpense.date}
+                  onChange={handleEditedExpenseChange}
+                  disabled={isUpdatingExpense}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="editExpensePrice">Price</label>
+                <input
+                  type="text"
+                  id="editExpensePrice"
+                  name="price"
+                  value={editedExpense.price}
+                  onChange={handleEditedExpenseChange}
+                  disabled={isUpdatingExpense}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="editExpenseName">Expense Name</label>
+                <input
+                  type="text"
+                  id="editExpenseName"
+                  name="name"
+                  value={editedExpense.name}
+                  onChange={handleEditedExpenseChange}
+                  disabled={isUpdatingExpense}
+                />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="modal-btn cancel"
+                onClick={() => setExpenseToEdit(null)}
+                disabled={isUpdatingExpense}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-btn create"
+                onClick={handleUpdateExpense}
+                disabled={!editedExpense.date.trim() || !editedExpense.price.trim() || !editedExpense.name.trim() || isUpdatingExpense}
+              >
+                {isUpdatingExpense ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {expenseToDelete && (
+        <div className="modal-overlay" onClick={() => setExpenseToDelete(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3>Delete Expense?</h3>
+            <p className="modal-message">
+              Are you sure you want to delete {expenseToDelete.name || expenseToDelete.location}?
+            </p>
+            <div className="modal-actions">
+              <button
+                className="modal-btn cancel"
+                onClick={() => setExpenseToDelete(null)}
+                disabled={isDeletingExpense}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-btn danger"
+                onClick={handleDeleteExpense}
+                disabled={isDeletingExpense}
+              >
+                {isDeletingExpense ? 'Deleting...' : 'Delete Expense'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPayAdminModal && (
+        <div className="modal-overlay" onClick={() => setShowPayAdminModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3>Pay Administrator</h3>
+            <p className="modal-message">
+              Pay {getPersonName(adminMember)} {formatCurrency(currentUserOwes)} for this group.
+            </p>
+            <p className="payment-detail">
+              <span>{adminPaymentLabel}</span>
+              {adminPaymentValue ? (
+                adminPaymentValue.startsWith('http') ? (
+                  <a href={adminPaymentValue} target="_blank" rel="noreferrer">{adminPaymentValue}</a>
+                ) : (
+                  <strong>{adminPaymentValue}</strong>
+                )
+              ) : (
+                <strong>No preferred payment detail has been added yet.</strong>
+              )}
+            </p>
+            <div className="modal-actions">
+              <button className="modal-btn create" onClick={() => setShowPayAdminModal(false)}>
+                Done
               </button>
             </div>
           </div>
