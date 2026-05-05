@@ -63,6 +63,23 @@ const GroupDashboard = () => {
   const includedMembers = members.filter((member) => !excludedMemberIds.includes(member.uid));
   const defaultSplitPercent = includedMembers.length ? 100 / includedMembers.length : 0;
 
+
+  const parseReceiptWithPython = async (file) => {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const res = await fetch('http://localhost:5000/ocr', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      throw new Error('OCR request failed');
+    }
+
+    return await res.json();
+  };
+
   const expenseTotal = expenses.reduce((total, expense) => {
     const amount = Number(String(expense.price || '').replace(/[^0-9.-]+/g, ''));
     return Number.isFinite(amount) ? total + amount : total;
@@ -263,6 +280,30 @@ const GroupDashboard = () => {
       setIsDeletingExpense(false);
     }
   };
+    const handleScanReceipt = async () => {
+      if (!expenseImageFile) return;
+
+      setIsSavingExpense(true);
+      setError('');
+
+      try {
+        const parsedData = await parseReceiptWithPython(expenseImageFile);
+
+        if (parsedData) {
+          setNewExpense(prev => ({
+            ...prev,
+            price: parsedData.amount || prev.price,
+            date: parsedData.date || prev.date,
+            name: prev.name || 'Receipt Expense'
+          }));
+        }
+      } catch (error) {
+        console.error('OCR error:', error);
+        setError('Failed to scan receipt');
+      } finally {
+        setIsSavingExpense(false);
+      }
+    };
 
   const handleAddExpense = async () => {
     if (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim() || isSavingExpense) {
@@ -274,20 +315,35 @@ const GroupDashboard = () => {
 
     try {
       let imageUrl = '';
+      let parsedData = null;
 
       if (expenseMode === 'image' && expenseImageFile) {
         const imagePath = `receipts/${groupId}/${Date.now()}-${expenseImageFile.name}`;
         const imageRef = ref(storage, imagePath);
+
         await uploadBytes(imageRef, expenseImageFile);
         imageUrl = await getDownloadURL(imageRef);
+
+        parsedData = await parseReceiptWithPython(expenseImageFile);
+        if (parsedData) {
+          setNewExpense(prev => ({
+            ...prev,
+            price: parsedData.amount || prev.price,
+            date: parsedData.date || prev.date
+          }));
+        }
       }
 
+      const detectedPrice = parsedData?.amount;
+      const detectedDate = parsedData?.date;
+
       await addDoc(collection(db, 'groups', groupId, 'expenses'), {
-        date: newExpense.date.trim(),
-        price: newExpense.price.trim(),
+        date: detectedDate || newExpense.date.trim(),
+        price: detectedPrice || newExpense.price.trim(),
         name: newExpense.name.trim(),
         imageName: newExpense.imageName,
         imageUrl,
+        rawText: parsedData?.rawText || '',
         entryType: expenseMode,
         createdAt: serverTimestamp(),
         createdBy: user.uid,
@@ -299,6 +355,7 @@ const GroupDashboard = () => {
       setExpenseImageFile(null);
       setExpenseMode('manual');
       setShowExpenseModal(false);
+
     } catch (error) {
       console.error('Add expense error:', error);
       setError(error.message);
@@ -338,6 +395,7 @@ const GroupDashboard = () => {
     const nextIncludedMembers = members.filter((member) => !excludedMemberIds.includes(member.uid));
     const nextPercent = nextIncludedMembers.length ? 100 / nextIncludedMembers.length : 0;
     const nextPercentages = {};
+    
 
     members.forEach((member) => {
       nextPercentages[member.uid] = excludedMemberIds.includes(member.uid) ? 0 : Number(nextPercent.toFixed(2));
@@ -662,16 +720,24 @@ const GroupDashboard = () => {
             </div>
             <div className="modal-form">
               {expenseMode === 'image' && (
-                <div className="form-group">
-                  <label htmlFor="expenseImage">Expense Image</label>
-                  <input
-                    type="file"
-                    id="expenseImage"
-                    accept="image/*"
-                    onChange={handleExpenseImage}
-                    disabled={isSavingExpense}
-                  />
-                </div>
+                <>
+                  <div className="form-group">
+                    <label htmlFor="expenseImage">Expense Image</label>
+                    <input
+                      type="file"
+                      id="expenseImage"
+                      accept="image/*"
+                      onChange={handleExpenseImage}
+                      disabled={isSavingExpense}
+                    />
+                  </div>
+
+                  {!newExpense.price && (
+                    <p className="hint-text">
+                      Upload a receipt and click "Scan Receipt"
+                    </p>
+                  )}
+                </>
               )}
               <div className="form-group">
                 <label htmlFor="expenseDate">Date</label>
@@ -681,7 +747,7 @@ const GroupDashboard = () => {
                   name="date"
                   value={newExpense.date}
                   onChange={handleExpenseChange}
-                  placeholder="May 3, 2026"
+                  placeholder="Jan 1, 2026"
                   disabled={isSavingExpense}
                 />
               </div>
@@ -693,7 +759,7 @@ const GroupDashboard = () => {
                   name="price"
                   value={newExpense.price}
                   onChange={handleExpenseChange}
-                  placeholder="$24.50"
+                  placeholder="$0.00"
                   disabled={isSavingExpense}
                 />
               </div>
@@ -721,7 +787,11 @@ const GroupDashboard = () => {
               <button
                 className="modal-btn create"
                 onClick={handleAddExpense}
-                disabled={!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim() || isSavingExpense}
+                disabled={
+                  expenseMode === 'manual'
+                    ? (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim())
+                    : (!expenseImageFile && !newExpense.price)
+                }
               >
                 {isSavingExpense ? 'Saving...' : 'Save Expense'}
               </button>
@@ -770,19 +840,35 @@ const GroupDashboard = () => {
               </div>
             </div>
             <div className="modal-actions">
+              {expenseMode === 'image' && (
+                <button
+                  className="modal-btn"
+                  type="button"
+                  onClick={handleScanReceipt}
+                  disabled={!expenseImageFile || isSavingExpense}
+                >
+                  {isSavingExpense ? 'Scanning...' : 'Scan Receipt'}
+                </button>
+              )}
+
               <button
                 className="modal-btn cancel"
-                onClick={() => setExpenseToEdit(null)}
-                disabled={isUpdatingExpense}
+                onClick={() => setShowExpenseModal(false)}
+                disabled={isSavingExpense}
               >
                 Cancel
               </button>
+
               <button
                 className="modal-btn create"
-                onClick={handleUpdateExpense}
-                disabled={!editedExpense.date.trim() || !editedExpense.price.trim() || !editedExpense.name.trim() || isUpdatingExpense}
+                onClick={handleAddExpense}
+                disabled={
+                  expenseMode === 'manual'
+                    ? (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim())
+                    : (!newExpense.price || !newExpense.name)
+                }
               >
-                {isUpdatingExpense ? 'Saving...' : 'Save Changes'}
+                Save Expense
               </button>
             </div>
           </div>
