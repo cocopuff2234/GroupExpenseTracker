@@ -4,34 +4,50 @@ import pytesseract
 import numpy as np
 import cv2
 import re
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 
 
 def preprocess_image(image):
     img = np.array(image)
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)[1]
+    # Reduce noise
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    # Adaptive threshold (better than fixed 150)
+    thresh = cv2.adaptiveThreshold(
+        blur,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        11,
+        2
+    )
 
     return thresh
 
 
 def extract_amount(text):
-    """
-    Try to find the total amount from receipt text.
-    Strategy:
-    - Look for currency-like values
-    - Return the LAST one (usually total)
-    """
-    matches = re.findall(r'\$?\d+\.\d{2}', text)
+    lines = text.split('\n')
 
-    if not matches:
-        return None
+    total_keywords = ['total', 'amount', 'balance', 'grand total']
 
-    return matches[-1] 
+    for line in reversed(lines):
+        lower = line.lower()
+
+        if any(keyword in lower for keyword in total_keywords):
+            match = re.search(r'\d+\.\d{2}', line)
+            if match:
+                return match.group(0)
+
+    matches = re.findall(r'\d+\.\d{2}', text)
+    return matches[-1] if matches else None
 
 
 def extract_date(text):

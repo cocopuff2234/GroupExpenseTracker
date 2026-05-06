@@ -9,11 +9,13 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  updateDoc
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '../config/firebase-config';
 import { AuthContext } from '../context/auth-context';
 import '../styles/Dashboard.css';
+
 
 const initialExpense = {
   date: '',
@@ -68,7 +70,7 @@ const GroupDashboard = () => {
     const formData = new FormData();
     formData.append('image', file);
 
-    const res = await fetch('http://localhost:5000/ocr', {
+    const res = await fetch('http://127.0.0.1:5000/ocr', {
       method: 'POST',
       body: formData
     });
@@ -299,7 +301,7 @@ const GroupDashboard = () => {
         }
       } catch (error) {
         console.error('OCR error:', error);
-        setError('Failed to scan receipt');
+        setError(error.message || 'Failed to scan receipt');
       } finally {
         setIsSavingExpense(false);
       }
@@ -730,6 +732,16 @@ const GroupDashboard = () => {
                       onChange={handleExpenseImage}
                       disabled={isSavingExpense}
                     />
+                    {expenseMode === 'image' && (
+                      <button
+                        className="modal-btn"
+                        type="button"
+                        onClick={handleScanReceipt}
+                        disabled={!expenseImageFile || isSavingExpense}
+                      >
+                        {isSavingExpense ? 'Scanning...' : 'Scan Receipt'}
+                      </button>
+                    )}
                   </div>
 
                   {!newExpense.price && (
@@ -840,17 +852,6 @@ const GroupDashboard = () => {
               </div>
             </div>
             <div className="modal-actions">
-              {expenseMode === 'image' && (
-                <button
-                  className="modal-btn"
-                  type="button"
-                  onClick={handleScanReceipt}
-                  disabled={!expenseImageFile || isSavingExpense}
-                >
-                  {isSavingExpense ? 'Scanning...' : 'Scan Receipt'}
-                </button>
-              )}
-
               <button
                 className="modal-btn cancel"
                 onClick={() => setShowExpenseModal(false)}
