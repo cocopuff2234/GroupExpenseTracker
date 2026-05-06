@@ -15,7 +15,7 @@
 }
 
 .dashboard-header {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(251, 255, 250, 0.9);
   padding: 1.5rem 2rem;
   display: flex;
   justify-content: space-between;
@@ -29,7 +29,7 @@
 .dashboard-title {
   font-size: 1.8rem;
   margin: 0;
-  color: #000;
+  color: #04330b;
   font-weight: 800;
   font-family: 'Montserrat', sans-serif;
 }
@@ -42,9 +42,9 @@
 
 .user-email {
   font-size: 0.9rem;
-  color: #1f1f1f;
+  color: #000000;
   margin-right: 0.5rem;
-  font-weight: 500;
+  font-weight: 510;
 }
 
 .icon-button,
@@ -60,7 +60,7 @@
 }
 
 .icon-button {
-  background-color: #000;
+  background-color: #04330b;
   color: #fff;
 }
 
@@ -70,7 +70,7 @@
 }
 
 .logout-button {
-  background-color: #000;
+  background-color: #04330b;
   color: #fff;
 }
 
@@ -100,12 +100,14 @@
   color: #000;
   margin-top: 0;
   font-weight: 700;
+  font-family: 'Montserrat', sans-serif;
   font-size: 1.5rem;
 }
 
 .welcome-section p {
   color: #1f1f1f;
   opacity: 0.75;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .groups-section {

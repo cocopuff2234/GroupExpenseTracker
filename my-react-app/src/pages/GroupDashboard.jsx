@@ -27,6 +27,7 @@ const initialExpense = {
 
 const getPersonName = (person) => person?.displayName || person?.email || 'Unknown user';
 
+
 const paymentMethodLabels = {
   venmo: 'Venmo',
   zelle: 'Zelle',
@@ -47,6 +48,7 @@ const GroupDashboard = () => {
   const [expenseMode, setExpenseMode] = useState('manual');
   const [newExpense, setNewExpense] = useState(initialExpense);
   const [expenseImageFile, setExpenseImageFile] = useState(null);
+  const [parsedReceipt, setParsedReceipt] = useState(null);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [expenseToEdit, setExpenseToEdit] = useState(null);
   const [editedExpense, setEditedExpense] = useState(initialExpense);
@@ -200,13 +202,15 @@ const GroupDashboard = () => {
 
   const handleExpenseImage = (e) => {
     const file = e.target.files?.[0];
+
     setExpenseImageFile(file || null);
+    setParsedReceipt(null); // ✅ reset OCR cache
+
     setNewExpense((prev) => ({
       ...prev,
       imageName: file?.name || ''
     }));
   };
-
   const handleEditedExpenseChange = (e) => {
     const { name, value } = e.target;
     setEditedExpense((prev) => ({
@@ -282,33 +286,41 @@ const GroupDashboard = () => {
       setIsDeletingExpense(false);
     }
   };
-    const handleScanReceipt = async () => {
-      if (!expenseImageFile) return;
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
+  const handleScanReceipt = async () => {
+    if (!expenseImageFile) return;
 
-      setIsSavingExpense(true);
-      setError('');
+    setIsSavingExpense(true);
+    setError('');
 
-      try {
-        const parsedData = await parseReceiptWithPython(expenseImageFile);
+    try {
+      const parsedData = await parseReceiptWithPython(expenseImageFile);
 
-        if (parsedData) {
-          setNewExpense(prev => ({
-            ...prev,
-            price: parsedData.amount || prev.price,
-            date: parsedData.date || prev.date,
-            name: prev.name || 'Receipt Expense'
-          }));
-        }
-      } catch (error) {
-        console.error('OCR error:', error);
-        setError(error.message || 'Failed to scan receipt');
-      } finally {
-        setIsSavingExpense(false);
+      if (parsedData) {
+        setParsedReceipt(parsedData); 
+
+        setNewExpense(prev => ({
+          ...prev,
+          price: parsedData.amount || prev.price,
+          date: parsedData.date || prev.date,
+          name: prev.name || 'Receipt Expense'
+        }));
       }
-    };
+    } catch (error) {
+      console.error('OCR error:', error);
+      setError(error.message || 'Failed to scan receipt');
+    } finally {
+      setIsSavingExpense(false);
+    }
+  };
 
   const handleAddExpense = async () => {
-    if (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim() || isSavingExpense) {
+    if (
+      !newExpense.date.trim() ||
+      !newExpense.price.trim() ||
+      !newExpense.name.trim() ||
+      isSavingExpense
+    ) {
       return;
     }
 
@@ -317,44 +329,32 @@ const GroupDashboard = () => {
 
     try {
       let imageUrl = '';
-      let parsedData = null;
 
-      if (expenseMode === 'image' && expenseImageFile) {
-        const imagePath = `receipts/${groupId}/${Date.now()}-${expenseImageFile.name}`;
-        const imageRef = ref(storage, imagePath);
 
-        await uploadBytes(imageRef, expenseImageFile);
-        imageUrl = await getDownloadURL(imageRef);
-
-        parsedData = await parseReceiptWithPython(expenseImageFile);
-        if (parsedData) {
-          setNewExpense(prev => ({
-            ...prev,
-            price: parsedData.amount || prev.price,
-            date: parsedData.date || prev.date
-          }));
-        }
-      }
-
-      const detectedPrice = parsedData?.amount;
-      const detectedDate = parsedData?.date;
+      const finalPrice = parsedReceipt?.amount || newExpense.price.trim();
+      const finalDate = parsedReceipt?.date || newExpense.date.trim();
 
       await addDoc(collection(db, 'groups', groupId, 'expenses'), {
-        date: detectedDate || newExpense.date.trim(),
-        price: detectedPrice || newExpense.price.trim(),
+        date: finalDate,
+        price: finalPrice,
         name: newExpense.name.trim(),
         imageName: newExpense.imageName,
         imageUrl,
-        rawText: parsedData?.rawText || '',
+        rawText: parsedReceipt?.rawText || '',
         entryType: expenseMode,
         createdAt: serverTimestamp(),
         createdBy: user.uid,
-        createdByName: userProfile?.displayName || user.displayName || user.email || '',
+        createdByName:
+          userProfile?.displayName ||
+          user.displayName ||
+          user.email ||
+          '',
         createdByEmail: user.email || ''
       });
 
       setNewExpense(initialExpense);
       setExpenseImageFile(null);
+      setParsedReceipt(null); // IMPORTANT
       setExpenseMode('manual');
       setShowExpenseModal(false);
 
@@ -854,7 +854,7 @@ const GroupDashboard = () => {
             <div className="modal-actions">
               <button
                 className="modal-btn cancel"
-                onClick={() => setShowExpenseModal(false)}
+                onClick={() => setExpenseToEdit(null)}
                 disabled={isSavingExpense}
               >
                 Cancel
@@ -862,11 +862,12 @@ const GroupDashboard = () => {
 
               <button
                 className="modal-btn create"
-                onClick={handleAddExpense}
+                onClick={handleUpdateExpense}
                 disabled={
-                  expenseMode === 'manual'
-                    ? (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim())
-                    : (!newExpense.price || !newExpense.name)
+                  !editedExpense.date.trim() ||
+                  !editedExpense.price.trim() ||
+                  !editedExpense.name.trim() ||
+                  isUpdatingExpense
                 }
               >
                 Save Expense
