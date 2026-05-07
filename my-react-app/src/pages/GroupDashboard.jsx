@@ -35,6 +35,13 @@ const paymentMethodLabels = {
   paypal: 'PayPal'
 };
 
+const OCR_ENDPOINTS = [
+  'http://127.0.0.1:5050/ocr',
+  'http://localhost:5050/ocr',
+  'http://127.0.0.1:5000/ocr',
+  'http://localhost:5000/ocr'
+];
+
 const GroupDashboard = () => {
   const { groupId } = useParams();
   const navigate = useNavigate();
@@ -69,19 +76,35 @@ const GroupDashboard = () => {
 
 
   const parseReceiptWithPython = async (file) => {
-    const formData = new FormData();
-    formData.append('image', file);
+    let lastError = null;
 
-    const res = await fetch('http://127.0.0.1:5000/ocr', {
-      method: 'POST',
-      body: formData
-    });
+    for (const endpoint of OCR_ENDPOINTS) {
+      const formData = new FormData();
+      formData.append('image', file);
 
-    if (!res.ok) {
-      throw new Error('OCR request failed');
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.error || 'OCR request failed');
+        }
+
+        return data;
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    return await res.json();
+    throw new Error(
+      lastError?.message === 'Failed to fetch'
+        ? 'Receipt scanner is not running. Start the Python OCR server, then try Scan Receipt again.'
+        : lastError?.message || 'Failed to scan receipt'
+    );
   };
 
   const expenseTotal = expenses.reduce((total, expense) => {
@@ -194,6 +217,10 @@ const GroupDashboard = () => {
 
   const handleExpenseChange = (e) => {
     const { name, value } = e.target;
+    if (parsedReceipt && (name === 'date' || name === 'price')) {
+      setParsedReceipt(null);
+    }
+
     setNewExpense((prev) => ({
       ...prev,
       [name]: value
@@ -288,15 +315,19 @@ const GroupDashboard = () => {
   };
   const [isScanningReceipt, setIsScanningReceipt] = useState(false);
   const handleScanReceipt = async () => {
-    if (!expenseImageFile) return;
+    if (!expenseImageFile || isScanningReceipt) return;
 
-    setIsSavingExpense(true);
+    setIsScanningReceipt(true);
     setError('');
 
     try {
       const parsedData = await parseReceiptWithPython(expenseImageFile);
 
       if (parsedData) {
+        if (!parsedData.amount && !parsedData.date) {
+          throw new Error('Receipt scanned, but no total or date was found. Try a clearer photo or enter the details manually.');
+        }
+
         setParsedReceipt(parsedData); 
 
         setNewExpense(prev => ({
@@ -310,15 +341,19 @@ const GroupDashboard = () => {
       console.error('OCR error:', error);
       setError(error.message || 'Failed to scan receipt');
     } finally {
-      setIsSavingExpense(false);
+      setIsScanningReceipt(false);
     }
   };
 
   const handleAddExpense = async () => {
+    const finalPrice = newExpense.price.trim();
+    const finalDate = newExpense.date.trim();
+    const finalName = newExpense.name.trim() || (expenseMode === 'image' ? 'Receipt Expense' : '');
+
     if (
-      !newExpense.date.trim() ||
-      !newExpense.price.trim() ||
-      !newExpense.name.trim() ||
+      !finalDate ||
+      !finalPrice ||
+      !finalName ||
       isSavingExpense
     ) {
       return;
@@ -330,14 +365,26 @@ const GroupDashboard = () => {
     try {
       let imageUrl = '';
 
+      if (expenseImageFile) {
+        const safeFileName = expenseImageFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const receiptPath = `receipts/${groupId}/${Date.now()}-${safeFileName}`;
+        const receiptRef = ref(storage, receiptPath);
 
-      const finalPrice = parsedReceipt?.amount || newExpense.price.trim();
-      const finalDate = parsedReceipt?.date || newExpense.date.trim();
+        try {
+          await uploadBytes(receiptRef, expenseImageFile, {
+            contentType: expenseImageFile.type || 'application/octet-stream'
+          });
+          imageUrl = await getDownloadURL(receiptRef);
+        } catch (uploadError) {
+          console.warn('Receipt image upload failed; saving expense without image:', uploadError);
+        }
+      }
+
 
       await addDoc(collection(db, 'groups', groupId, 'expenses'), {
         date: finalDate,
         price: finalPrice,
-        name: newExpense.name.trim(),
+        name: finalName,
         imageName: newExpense.imageName,
         imageUrl,
         rawText: parsedReceipt?.rawText || '',
@@ -524,20 +571,29 @@ const GroupDashboard = () => {
                               <span className="group-code">By {expense.createdByName || expense.createdByEmail || 'Unknown user'}</span>
                               {expense.imageName && <span className="group-code">{expense.imageName}</span>}
                             </div>
-                            {expense.imageUrl && (
-                              <a className="receipt-link" href={expense.imageUrl} target="_blank" rel="noreferrer">
-                                View receipt image
-                              </a>
-                            )}
                           </div>
-                          {expense.createdBy === user?.uid && (
+                          {(expense.imageUrl || expense.createdBy === user?.uid) && (
                             <div className="group-actions">
-                              <button className="group-action-btn" onClick={() => openEditExpense(expense)}>
-                                Edit
-                              </button>
-                              <button className="group-action-btn danger" onClick={() => setExpenseToDelete(expense)}>
-                                Delete
-                              </button>
+                              {expense.imageUrl && (
+                                <a
+                                  className="receipt-icon-link"
+                                  href={expense.imageUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  aria-label="View receipt image"
+                                  title="View receipt image"
+                                />
+                              )}
+                              {expense.createdBy === user?.uid && (
+                                <>
+                                  <button className="group-action-btn" onClick={() => openEditExpense(expense)}>
+                                    Edit
+                                  </button>
+                                  <button className="group-action-btn danger" onClick={() => setExpenseToDelete(expense)}>
+                                    Delete
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -720,7 +776,7 @@ const GroupDashboard = () => {
                 Image
               </button>
             </div>
-            <div className="modal-form">
+              <div className="modal-form">
               {expenseMode === 'image' && (
                 <>
                   <div className="form-group">
@@ -737,9 +793,9 @@ const GroupDashboard = () => {
                         className="modal-btn"
                         type="button"
                         onClick={handleScanReceipt}
-                        disabled={!expenseImageFile || isSavingExpense}
+                        disabled={!expenseImageFile || isScanningReceipt}
                       >
-                        {isSavingExpense ? 'Scanning...' : 'Scan Receipt'}
+                        {isScanningReceipt ? 'Scanning...' : 'Scan Receipt'}
                       </button>
                     )}
                   </div>
@@ -787,7 +843,8 @@ const GroupDashboard = () => {
                   disabled={isSavingExpense}
                 />
               </div>
-            </div>
+              </div>
+              {error && <p className="modal-error">{error}</p>}
             <div className="modal-actions">
               <button
                 className="modal-btn cancel"
@@ -800,9 +857,12 @@ const GroupDashboard = () => {
                 className="modal-btn create"
                 onClick={handleAddExpense}
                 disabled={
-                  expenseMode === 'manual'
-                    ? (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim())
-                    : (!expenseImageFile && !newExpense.price)
+                  isSavingExpense ||
+                  (
+                    expenseMode === 'manual'
+                      ? (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim())
+                      : (!newExpense.date.trim() || !newExpense.price.trim() || !newExpense.name.trim())
+                  )
                 }
               >
                 {isSavingExpense ? 'Saving...' : 'Save Expense'}
