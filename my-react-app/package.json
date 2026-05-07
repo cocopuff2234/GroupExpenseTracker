@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "ocr": "sh -c '[ -x .venv/bin/python ] && .venv/bin/python splitcheck-backend/app.py || python3 splitcheck-backend/app.py'",
+    "ocr": "sh -c '[ -x .venv-ocr/bin/python ] && .venv-ocr/bin/python splitcheck-backend/app.py || ([ -x .venv/bin/python ] && .venv/bin/python splitcheck-backend/app.py || python3 splitcheck-backend/app.py)'",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

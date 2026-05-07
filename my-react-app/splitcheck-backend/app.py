@@ -1,8 +1,6 @@
 from flask import Flask, request, jsonify
-from PIL import Image
+from PIL import Image, ImageFilter, ImageOps
 import pytesseract
-import numpy as np
-import cv2
 import re
 import shutil
 from flask_cors import CORS
@@ -14,30 +12,12 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 
 
 def preprocess_image(image):
-    img = np.array(image.convert('RGB'))
+    gray = ImageOps.grayscale(image)
+    scaled = gray.resize((gray.width * 2, gray.height * 2), Image.Resampling.LANCZOS)
+    contrasted = ImageOps.autocontrast(scaled)
+    sharpened = contrasted.filter(ImageFilter.SHARPEN)
 
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    scale = 2
-    gray = cv2.resize(
-        gray,
-        None,
-        fx=scale,
-        fy=scale,
-        interpolation=cv2.INTER_CUBIC
-    )
-
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
-
-    thresh = cv2.adaptiveThreshold(
-        blur,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        11,
-        2
-    )
-
-    return thresh
+    return sharpened.point(lambda pixel: 255 if pixel > 165 else 0)
 
 
 def extract_amount(text):
@@ -118,4 +98,4 @@ def ocr_receipt():
 
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5050, debug=True)
+    app.run(host='127.0.0.1', port=5050, debug=False, use_reloader=False)

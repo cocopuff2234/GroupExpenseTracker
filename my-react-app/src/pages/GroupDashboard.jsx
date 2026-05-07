@@ -42,6 +42,15 @@ const OCR_ENDPOINTS = [
   'http://localhost:5000/ocr'
 ];
 
+const RECEIPT_UPLOAD_TIMEOUT_MS = 12000;
+
+const withTimeout = (promise, timeoutMessage) => Promise.race([
+  promise,
+  new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(timeoutMessage)), RECEIPT_UPLOAD_TIMEOUT_MS);
+  })
+]);
+
 const GroupDashboard = () => {
   const { groupId } = useParams();
   const navigate = useNavigate();
@@ -349,6 +358,9 @@ const GroupDashboard = () => {
     const finalPrice = newExpense.price.trim();
     const finalDate = newExpense.date.trim();
     const finalName = newExpense.name.trim() || (expenseMode === 'image' ? 'Receipt Expense' : '');
+    const receiptFile = expenseImageFile;
+    const receiptImageName = newExpense.imageName;
+    const receiptRawText = parsedReceipt?.rawText || '';
 
     if (
       !finalDate ||
@@ -363,31 +375,13 @@ const GroupDashboard = () => {
     setError('');
 
     try {
-      let imageUrl = '';
-
-      if (expenseImageFile) {
-        const safeFileName = expenseImageFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const receiptPath = `receipts/${groupId}/${Date.now()}-${safeFileName}`;
-        const receiptRef = ref(storage, receiptPath);
-
-        try {
-          await uploadBytes(receiptRef, expenseImageFile, {
-            contentType: expenseImageFile.type || 'application/octet-stream'
-          });
-          imageUrl = await getDownloadURL(receiptRef);
-        } catch (uploadError) {
-          console.warn('Receipt image upload failed; saving expense without image:', uploadError);
-        }
-      }
-
-
-      await addDoc(collection(db, 'groups', groupId, 'expenses'), {
+      const expenseRef = await addDoc(collection(db, 'groups', groupId, 'expenses'), {
         date: finalDate,
         price: finalPrice,
         name: finalName,
-        imageName: newExpense.imageName,
-        imageUrl,
-        rawText: parsedReceipt?.rawText || '',
+        imageName: receiptImageName,
+        imageUrl: '',
+        rawText: receiptRawText,
         entryType: expenseMode,
         createdAt: serverTimestamp(),
         createdBy: user.uid,
@@ -404,6 +398,33 @@ const GroupDashboard = () => {
       setParsedReceipt(null); // IMPORTANT
       setExpenseMode('manual');
       setShowExpenseModal(false);
+
+      if (receiptFile) {
+        const safeFileName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const receiptPath = `receipts/${groupId}/${expenseRef.id}-${Date.now()}-${safeFileName}`;
+        const receiptRef = ref(storage, receiptPath);
+
+        void (async () => {
+          try {
+            await withTimeout(
+              uploadBytes(receiptRef, receiptFile, {
+                contentType: receiptFile.type || 'application/octet-stream'
+              }),
+              'Receipt image upload timed out'
+            );
+            const imageUrl = await withTimeout(
+              getDownloadURL(receiptRef),
+              'Receipt image URL lookup timed out'
+            );
+            await updateDoc(expenseRef, {
+              imageUrl,
+              imagePath: receiptPath
+            });
+          } catch (uploadError) {
+            console.warn('Receipt image upload failed after expense save:', uploadError);
+          }
+        })();
+      }
 
     } catch (error) {
       console.error('Add expense error:', error);
