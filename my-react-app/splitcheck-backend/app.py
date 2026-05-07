@@ -1,9 +1,8 @@
 from flask import Flask, request, jsonify
-from PIL import Image
+from PIL import Image, ImageFilter, ImageOps
 import pytesseract
-import numpy as np
-import cv2
 import re
+import shutil
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -13,41 +12,30 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 
 
 def preprocess_image(image):
-    img = np.array(image)
+    gray = ImageOps.grayscale(image)
+    scaled = gray.resize((gray.width * 2, gray.height * 2), Image.Resampling.LANCZOS)
+    contrasted = ImageOps.autocontrast(scaled)
+    sharpened = contrasted.filter(ImageFilter.SHARPEN)
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Reduce noise
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # Adaptive threshold (better than fixed 150)
-    thresh = cv2.adaptiveThreshold(
-        blur,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        11,
-        2
-    )
-
-    return thresh
+    return sharpened.point(lambda pixel: 255 if pixel > 165 else 0)
 
 
 def extract_amount(text):
     lines = text.split('\n')
 
-    total_keywords = ['total', 'amount', 'balance', 'grand total']
+    total_keywords = ['total', 'amount', 'balance', 'grand total', 'paid', 'due']
+    amount_pattern = r'\$?\s*(\d{1,4}(?:,\d{3})*\.\d{2})'
 
     for line in reversed(lines):
         lower = line.lower()
 
         if any(keyword in lower for keyword in total_keywords):
-            match = re.search(r'\d+\.\d{2}', line)
+            match = re.search(amount_pattern, line)
             if match:
-                return match.group(0)
+                return match.group(1).replace(',', '')
 
-    matches = re.findall(r'\d+\.\d{2}', text)
-    return matches[-1] if matches else None
+    matches = re.findall(amount_pattern, text)
+    return matches[-1].replace(',', '') if matches else None
 
 
 def extract_date(text):
@@ -83,6 +71,11 @@ def ocr_receipt():
     except Exception:
         return jsonify({'error': 'Invalid image file'}), 400
 
+    if not shutil.which('tesseract'):
+        return jsonify({
+            'error': 'Tesseract OCR is not installed. Install it with: brew install tesseract'
+        }), 500
+
     try:
         processed = preprocess_image(image)
 
@@ -105,4 +98,4 @@ def ocr_receipt():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='127.0.0.1', port=5050, debug=False, use_reloader=False)
